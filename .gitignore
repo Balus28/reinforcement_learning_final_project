@@ -10,4 +10,4 @@ results.csv
 dist/
 scripts/
 .claude/
-tests/
+submission_report.txt

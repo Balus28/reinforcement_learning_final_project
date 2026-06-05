@@ -6,7 +6,7 @@
 """
 agent.py
 
-Primera implementación colaborativa para el proyecto de asignación de portafolio
+Primera propuesta deimplementación para el proyecto de asignación de portafolio
 con aprendizaje por refuerzo.
 
 Adiciones:
