@@ -47,7 +47,32 @@ except ModuleNotFoundError:
 # 1. Entorno de trading: primera implementación específica para el agente.
 
 
+_ACTION_WEIGHTS = np.array(
+ [
+        [0.00, 0.00, 0.00, 1.00],        # 0: 100% cash
+        [1.00, 0.00, 0.00, 0.00],        # 1: 100% asset_0
+        [0.00, 1.00, 0.00, 0.00],        # 2: 100% asset_1
+        [0.00, 0.00, 1.00, 0.00],        # 3: 100% asset_2
+        [1 / 3, 1 / 3, 1 / 3, 0.00],     # 4: equal weight risky
 
+        [0.50, 0.50, 0.00, 0.00],        # 5: long asset_0 + asset_1
+        [0.50, 0.00, 0.50, 0.00],        # 6: long asset_0 + asset_2
+        [0.00, 0.50, 0.50, 0.00],        # 7: long asset_1 + asset_2
+
+        [0.25, 0.25, 0.25, 0.25],        # 8: balanced risky/cash
+        [0.50, 0.00, 0.00, 0.50],        # 9: defensive asset_0
+        [0.00, 0.50, 0.00, 0.50],        # 10: defensive asset_1
+        [0.00, 0.00, 0.50, 0.50],        # 11: defensive asset_2
+
+        [-0.25, 0.50, 0.25, 0.50],       # 12: short asset_0, long asset_1/2, cash buffer
+        [0.50, -0.25, 0.25, 0.50],       # 13: short asset_1, long asset_0/2, cash buffer
+        [0.50, 0.25, -0.25, 0.50],       # 14: short asset_2, long asset_0/1, cash buffer
+ ]
+,
+dtype=np.float32,
+)
+
+N_ACTIONS = len(_ACTION_WEIGHTS)        
 class TradingEnv(BaseTradingEnv):
     """
     Entorno específico del agente.
@@ -65,30 +90,6 @@ class TradingEnv(BaseTradingEnv):
         - función de recompensa.
     """
 
-    ACTIONS = np.array(
-        [
-            [0.00, 0.00, 0.00, 1.00],        # 0: 100% cash
-            [1.00, 0.00, 0.00, 0.00],        # 1: 100% asset_0
-            [0.00, 1.00, 0.00, 0.00],        # 2: 100% asset_1
-            [0.00, 0.00, 1.00, 0.00],        # 3: 100% asset_2
-            [1/3, 1/3, 1/3, 0.00],           # 4: equal weight risky
-
-            [0.50, 0.50, 0.00, 0.00],        # 5: long asset_0 + asset_1
-            [0.50, 0.00, 0.50, 0.00],        # 6: long asset_0 + asset_2
-            [0.00, 0.50, 0.50, 0.00],        # 7: long asset_1 + asset_2
-
-            [0.25, 0.25, 0.25, 0.25],        # 8: balanced risky/cash
-            [0.50, 0.00, 0.00, 0.50],        # 9: defensive asset_0
-            [0.00, 0.50, 0.00, 0.50],        # 10: defensive asset_1
-            [0.00, 0.00, 0.50, 0.50],        # 11: defensive asset_2
-
-            [-0.25, 0.50, 0.25, 0.50],       # 12: short asset_0, long asset_1/2, cash buffer
-            [0.50, -0.25, 0.25, 0.50],       # 13: short asset_1, long asset_0/2, cash buffer
-            [0.50, 0.25, -0.25, 0.50],       # 14: short asset_2, long asset_0/1, cash buffer
-        ],
-        dtype=np.float32,
-    )
-
     def __init__(
         self,
         prices,
@@ -100,6 +101,7 @@ class TradingEnv(BaseTradingEnv):
         self._lookback = lookback
         self.turnover_penalty = turnover_penalty
         self._last_turnover = 0.0
+        self._ACTION_WEIGHTS = _ACTION_WEIGHTS
 
         super().__init__(
             prices=prices,
@@ -120,11 +122,11 @@ class TradingEnv(BaseTradingEnv):
             shape=(obs_dim,),
             dtype=np.float32,
         )
-        self.action_space = spaces.Discrete(len(self.ACTIONS))
+        self.action_space = spaces.Discrete(len(self._ACTION_WEIGHTS))
 
     @property
     def n_actions(self) -> int:
-        return len(self.ACTIONS)
+        return len(self._ACTION_WEIGHTS)
 
     def _obs(self) -> np.ndarray:
         start = self._t - self._lookback
@@ -137,10 +139,10 @@ class TradingEnv(BaseTradingEnv):
 
     def _weights_from_action(self, action: int) -> np.ndarray:
         action_idx = int(action)
-        if action_idx < 0 or action_idx >= len(self.ACTIONS):
+        if action_idx < 0 or action_idx >= len(self._ACTION_WEIGHTS):
             raise ValueError(f"Invalid action index: {action_idx}")
 
-        weights = self.ACTIONS[action_idx].copy()
+        weights = self._ACTION_WEIGHTS[action_idx].copy()
         self._last_turnover = float(np.abs(weights - self._weights).sum())
 
         return weights
@@ -290,13 +292,13 @@ class Agent(BaseAgent):
         self.replay = ReplayBuffer(capacity=buffer_capacity)
 
         self.total_steps = 0
-
+    @property
     def _epsilon(self) -> float:
         frac = min(1.0, self.total_steps / self.epsilon_decay_steps)
         return self.epsilon_start + frac * (self.epsilon_end - self.epsilon_start)
 
     def _select_action(self, obs: np.ndarray, explore: bool = True) -> int:
-        if explore and np.random.rand() < self._epsilon():
+        if explore and np.random.rand() < self._epsilon:
             return int(np.random.randint(self.n_actions))
 
         obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)

@@ -207,9 +207,9 @@ class TestAgent:
     def test_epsilon_decays_during_training(self, prices, obs_dim):
         env = TradingEnv(_make_prices(n_rows=60))
         ag  = Agent(obs_dim=obs_dim, n_actions=N_ACTIONS)
-        epsilon_before = ag.epsilon
+        epsilon_before = ag._epsilon
         ag.train(env, n_steps=200)
-        assert ag.epsilon < epsilon_before
+        assert ag._epsilon < epsilon_before
 
 
 # ── Integration test ──────────────────────────────────────────────────────────
