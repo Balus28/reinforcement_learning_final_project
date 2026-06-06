@@ -1,0 +1,23 @@
+{
+  "interval": "1h",
+  "train_end": "2024-01-01",
+  "eval_end": "2024-06-01",
+  "train_steps": 200000,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "transaction_cost_bps": [
+    0.0,
+    10.0
+  ],
+  "turnover_penalties": [
+    0.0,
+    1e-05,
+    5e-05,
+    0.0001
+  ],
+  "metric_freq": 8760,
+  "selection_note": "robust_score = cum_ret_mean - 0.50*cum_ret_std + 0.50*max_dd_mean - 0.0005*total_turnover_mean"
+}
