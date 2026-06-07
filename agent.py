@@ -46,6 +46,12 @@ except ModuleNotFoundError:
 
 # 1. Entorno de trading: primera implementación específica para el agente.
 
+# Configuración metodológica final
+# Valor seleccionado después de la iteración de recompensa.
+# La evaluación mostró que, bajo costos de transacción realistas de 10 bps,
+# una penalización pequeña por turnover mejora el balance entre rentabilidad,
+# estabilidad y control de rebalanceos.
+DEFAULT_TURNOVER_PENALTY = 0.00005
 
 _ACTION_WEIGHTS = np.array(
  [
@@ -96,7 +102,7 @@ class TradingEnv(BaseTradingEnv):
         transaction_cost_bps: float = 10.0,
         initial_cash: float = 10_000.0,
         lookback: int = 20,
-        turnover_penalty: float = 0.0,
+        turnover_penalty: float = DEFAULT_TURNOVER_PENALTY,
     ):
         self._lookback = lookback
         self.turnover_penalty = turnover_penalty
@@ -148,9 +154,25 @@ class TradingEnv(BaseTradingEnv):
         return weights
 
     def _reward(self, prev_value: float, curr_value: float) -> float:
-        log_ret = float(np.log((curr_value + 1e-8) / (prev_value + 1e-8)))
-        return log_ret - self.turnover_penalty * self._last_turnover
+            """
+            Señal de recompensa del agente.
 
+            Recompensa base:
+                log(curr_value / prev_value)
+
+            Regularización final:
+                - turnover_penalty * turnover
+
+            Interpretación:
+                El ambiente ya descuenta costos de transacción del valor del portafolio.
+                Por tanto, esta penalización no reemplaza los fees. Se usa como una
+                señal adicional de aprendizaje para desalentar rebalanceos innecesarios.
+
+            La configuración final usa DEFAULT_TURNOVER_PENALTY = 0.00005, seleccionada
+            mediante evaluación robusta de recompensa.
+            """
+            log_ret = float(np.log((curr_value + 1e-8) / (prev_value + 1e-8)))
+            return log_ret - self.turnover_penalty * self._last_turnover
 
 
 # 2. Red neuronal Q: arquitectura simple de MLP con heads separados para valor y ventaja (Dueling DQN).

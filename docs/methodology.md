@@ -452,3 +452,282 @@ figures/reward_iteration_summary_10bps.png
 ```
 
 Estos archivos documentan la comparación de configuraciones y sirven como evidencia para la sección de reward design de la rúbrica.
+
+## 16. Integración de hallazgos en la versión final del agente
+
+Después de completar la evaluación inicial, la comparación robusta por múltiples seeds y la iteración de recompensa, se tomó una decisión metodológica final sobre la configuración del agente.
+
+La primera versión del agente usaba como recompensa:
+
+```text
+reward = log(curr_value / prev_value)
+```
+
+Esta recompensa fue válida y permitió obtener una política funcional. Sin embargo, la evaluación con costos de transacción mostró que el agente podía mejorar si la señal de aprendizaje incluía una regularización adicional sobre el turnover.
+
+Por esta razón, se evaluó la siguiente variante:
+
+```text
+reward = log(curr_value / prev_value) - λ × turnover
+```
+
+Los valores evaluados fueron:
+
+```text
+λ ∈ [0.0, 0.00001, 0.00005, 0.0001]
+```
+
+La evaluación se realizó bajo dos escenarios:
+
+- `0 bps`, para observar el comportamiento sin costos de transacción.
+- `10 bps`, para evaluar el comportamiento bajo costos realistas de rebalanceo.
+
+La configuración que mostró mejor balance bajo `10 bps` fue:
+
+```text
+turnover_penalty = 0.00005
+```
+
+Esta configuración obtuvo el mayor retorno acumulado promedio y el mejor `robust_score` en el escenario con costos de transacción. Por esta razón, se integró como configuración metodológica final del ambiente.
+
+Es importante aclarar que esta penalización no reemplaza los costos de transacción. El ambiente ya descuenta fees directamente del valor del portafolio. La penalización por turnover se interpreta como un regularizador de comportamiento: ayuda al agente a evitar rebalanceos innecesarios y a aprender políticas más estables.
+
+---
+
+## 17. Evidencia visual usada para justificar la configuración final
+
+Las figuras generadas durante la evaluación se incluyen en el repositorio como evidencia metodológica. Estas figuras respaldan las decisiones tomadas sobre el diseño del estado, el espacio de acciones, la recompensa y la configuración final del agente.
+
+### 17.1 Curvas de capital
+
+Las curvas de capital muestran la evolución del valor del portafolio del agente frente a los baselines.
+
+![Curvas de capital normalizadas 0 bps](../figures/equity_curves_0bps.png)
+
+En el escenario `0 bps`, algunas políticas de alta rotación pueden parecer competitivas porque no pagan costos de transacción. Esta figura muestra por qué una evaluación sin fricción puede ser engañosa: una política puede obtener buenos resultados simplemente porque no se penaliza el exceso de rebalanceos.
+
+![Curvas de capital normalizadas 10 bps](../figures/equity_curves_10bps.png)
+
+En el escenario `10 bps`, las políticas de alta rotación, especialmente `Random` y `SMA`, se deterioran fuertemente. El agente mantiene una trayectoria positiva, aunque no supera a los benchmarks pasivos más fuertes como `EqualWeight` y `HoldAsset0`.
+
+Esto permite concluir que la principal fortaleza del agente no es dominar todos los benchmarks, sino mantener un comportamiento más robusto que las políticas activas de alta rotación cuando existen costos de transacción.
+
+### 17.2 Distribución de acciones
+
+![Distribución de acciones del agente 0 bps](../figures/agent_action_distribution_0bps.png)
+
+A `0 bps`, el agente distribuye sus acciones entre varias posiciones riesgosas y defensivas. Esto muestra que, sin costos, el agente tiene más libertad para explorar distintas asignaciones de capital.
+
+![Distribución de acciones del agente 10 bps](../figures/agent_action_distribution_10bps.png)
+
+A `10 bps`, el agente concentra su comportamiento en menos acciones. Esto indica que bajo costos de transacción aprende una política más estable y menos dispersa. Esta concentración también sugiere que el agente reduce la frecuencia de cambios innecesarios cuando los rebalanceos tienen impacto económico.
+
+### 17.3 Acciones seleccionadas durante evaluación
+
+![Acciones seleccionadas por el agente 0 bps](../figures/agent_actions_0bps.png)
+
+En la evaluación individual a `0 bps`, el agente selecciona principalmente una acción dominante asociada a exposición diversificada, con cambios puntuales hacia otras acciones. Esto muestra que el agente no actúa de forma aleatoria, sino que aprende una preferencia de asignación relativamente estable.
+
+![Acciones seleccionadas por el agente 10 bps](../figures/agent_actions_10bps.png)
+
+En la evaluación individual a `10 bps`, el agente mantiene durante largos períodos una acción principal y realiza pocos cambios. Esta conducta es consistente con la necesidad de reducir rebalanceos cuando existen costos de transacción.
+
+### 17.4 Turnover del agente
+
+![Turnover del agente 0 bps](../figures/agent_turnover_0bps.png)
+
+El gráfico de turnover a `0 bps` muestra que el agente no cambia de asignación constantemente. La mayoría del tiempo mantiene el mismo portafolio, con algunos picos aislados de rebalanceo.
+
+![Turnover del agente 10 bps](../figures/agent_turnover_10bps.png)
+
+El gráfico de turnover a `10 bps` muestra un comportamiento similar: el agente presenta picos puntuales, pero no opera de forma hiperactiva. Esto respalda la idea de que el agente tiene un comportamiento más estable que baselines como `Random` y `SMA`.
+
+### 17.5 Dispersión por seed
+
+![Seed spread 0 bps](../figures/agent_seed_spread_0bps.png)
+
+La dispersión por seed a `0 bps` muestra que el entrenamiento del agente es sensible a la inicialización y a la trayectoria de exploración. Algunas seeds generan políticas más rentables que otras. Esto justifica no reportar únicamente una corrida individual.
+
+![Seed spread 10 bps](../figures/agent_seed_spread_10bps.png)
+
+La dispersión por seed a `10 bps` muestra que, aunque el agente mantiene rentabilidad positiva en varias configuraciones, todavía existe variabilidad entre entrenamientos. Este resultado evidencia una limitación importante del enfoque: el agente puede aprender políticas válidas, pero su desempeño no es completamente estable entre seeds.
+
+### 17.6 Comparación promedio por política
+
+![Retorno acumulado promedio por política 0 bps](../figures/policy_cumret_summary_0bps.png)
+
+A `0 bps`, el agente es rentable, pero no supera consistentemente a `EqualWeight`. Esto muestra que la estrategia RL no debe presentarse como claramente superior a los benchmarks pasivos.
+
+![Retorno acumulado promedio por política 10 bps](../figures/policy_cumret_summary_10bps.png)
+
+A `10 bps`, el agente supera a políticas activas de alta rotación como `Random` y `SMA`, pero sigue por debajo de `EqualWeight` y `HoldAsset0`. Esto confirma que su principal fortaleza es la robustez frente a costos, no la dominancia absoluta en retorno.
+
+### 17.7 Iteración de recompensa
+
+![Reward iteration summary 0 bps](../figures/reward_iteration_summary_0bps.png)
+
+En `0 bps`, la recompensa original sin penalización por turnover fue suficiente. Penalizar turnover en un entorno sin costos reduce innecesariamente la flexibilidad del agente.
+
+![Reward iteration summary 10 bps](../figures/reward_iteration_summary_10bps.png)
+
+En `10 bps`, la mejor configuración fue `turnover_penalty = 0.00005`. Esta figura justifica la integración de esa penalización como configuración final del agente, ya que mejora el balance entre retorno acumulado, drawdown, turnover y estabilidad.
+
+---
+
+## 18. Racional final de configuración del agente
+
+La configuración final del agente se basa en las siguientes decisiones metodológicas.
+
+### 18.1 Estado
+
+El estado incluye una ventana de retornos logarítmicos y los pesos actuales del portafolio:
+
+```text
+[retornos recientes de asset_0, asset_1, asset_2, pesos actuales]
+```
+
+Esta decisión permite que el agente observe la tendencia reciente de los activos riesgosos y, al mismo tiempo, conozca su asignación actual. Esto es importante porque los costos de transacción dependen del cambio entre el portafolio anterior y el nuevo portafolio.
+
+Usar retornos logarítmicos en lugar de precios crudos también evita que el agente aprenda únicamente niveles de precio, los cuales no son estacionarios. Los retornos representan mejor la dinámica reciente del mercado.
+
+### 18.2 Acción
+
+Se usa un menú discreto de portafolios interpretables. Esta decisión se tomó porque el framework exige acciones enteras y porque facilita explicar económicamente cada decisión del agente.
+
+Cada acción representa una asignación completa:
+
+```text
+[asset_0, asset_1, asset_2, cash]
+```
+
+El menú preserva las convenciones de los baselines:
+
+```text
+acción 0 = cash
+acción 1 = asset_0
+acción 4 = equal weight
+```
+
+Esto permite comparar el agente contra `HoldCash`, `HoldAsset0` y `EqualWeight` sin romper el significado esperado de esas políticas.
+
+La principal limitación de este enfoque es que el agente no puede escoger pesos continuos arbitrarios. Sin embargo, esta restricción mejora la interpretabilidad, reduce la complejidad de entrenamiento y mantiene compatibilidad con el sistema de evaluación.
+
+### 18.3 Recompensa
+
+La recompensa final usa log-retorno neto del portafolio con una penalización pequeña por turnover:
+
+```text
+reward = log(curr_value / prev_value) - 0.00005 × turnover
+```
+
+Esta configuración fue seleccionada porque produjo el mejor balance bajo costos realistas de transacción.
+
+La penalización por turnover no reemplaza los costos de transacción. El ambiente ya descuenta los fees directamente del valor del portafolio. La penalización funciona como una señal adicional de aprendizaje para inducir un comportamiento más estable y reducir rebalanceos innecesarios.
+
+### 18.4 Algoritmo
+
+Se usa un agente `Double DQN` con arquitectura tipo `Dueling DQN`.
+
+Esta elección es adecuada porque:
+
+- el espacio de acciones es discreto;
+- cada acción corresponde a un portafolio interpretable;
+- `Double DQN` ayuda a reducir la sobreestimación de valores Q;
+- la arquitectura `Dueling DQN` separa el valor general del estado de la ventaja relativa de cada acción.
+
+El agente usa exploración `epsilon-greedy` durante entrenamiento. Al inicio explora más acciones; con el tiempo, `epsilon` disminuye y el agente explota con mayor frecuencia las acciones con mayor Q-value estimado.
+
+### 18.5 Evaluación
+
+La evaluación se realizó con:
+
+```text
+interval: 1h
+train_end: 2024-01-01
+eval_end: 2024-06-01
+train_steps: 200000
+costos: 0 bps y 10 bps
+seeds: múltiples seeds
+```
+
+La comparación incluyó:
+
+- `Random`
+- `HoldCash`
+- `HoldAsset0`
+- `EqualWeight`
+- `SMA`
+
+Las métricas consideradas fueron:
+
+- retorno acumulado;
+- retorno anualizado;
+- volatilidad anualizada;
+- Sharpe ratio;
+- Sortino ratio;
+- maximum drawdown;
+- fees totales;
+- turnover total;
+- valor final del portafolio.
+
+### 18.6 Conclusión metodológica
+
+El agente final no debe interpretarse como una estrategia que domina a todos los benchmarks. Su resultado más importante es metodológico: aprende una política rentable, interpretable y relativamente robusta frente a costos de transacción.
+
+Sin embargo, estrategias pasivas simples como `EqualWeight` siguen siendo difíciles de superar en el período held-out. Esto muestra una brecha importante entre la teoría de reinforcement learning y su aplicación financiera: una política RL puede estar correctamente formulada y ser funcional, pero no necesariamente superar estrategias simples en mercados ruidosos, no estacionarios y con datos limitados.
+
+---
+
+## 19. Verificación final de funcionamiento
+
+Antes de la entrega final, se ejecutó nuevamente la suite oficial de pruebas del proyecto:
+
+```bash
+uv run python -m pytest tests/test_submission.py -v
+```
+
+El resultado fue satisfactorio: todas las pruebas fueron aprobadas.
+
+Esta verificación confirma que el archivo `agent.py` cumple con la interfaz esperada por el framework de evaluación. En particular, se comprobó que el archivo define correctamente:
+
+```text
+TradingEnv
+Agent
+N_ACTIONS
+_ACTION_WEIGHTS
+```
+
+Además, las pruebas verificaron que:
+
+- el ambiente se puede instanciar correctamente;
+- `reset()` devuelve observaciones con la forma y tipo esperados;
+- `step()` funciona para todas las acciones disponibles;
+- todos los vectores de pesos suman 1;
+- el peso de `cash` no es negativo;
+- los pesos de activos riesgosos están dentro de los límites permitidos;
+- la recompensa es finita y tiene el signo correcto cuando el portafolio sube o baja;
+- `Agent.act(obs)` devuelve una acción válida;
+- la política es determinista durante evaluación;
+- el entrenamiento corto se ejecuta sin errores;
+- `epsilon` disminuye durante el entrenamiento;
+- un rollout completo mantiene valores de portafolio positivos y finitos.
+
+Esta etapa es importante porque separa la validez técnica mínima de la evaluación metodológica. Pasar los tests no demuestra que el agente sea financieramente superior, pero sí demuestra que la implementación es compatible con el entorno oficial y puede ser evaluada por el docente sin errores de interfaz.
+
+---
+
+## 20. Cierre del proceso metodológico
+
+El proceso completo siguió una secuencia incremental:
+
+1. Construcción de una primera versión compatible con el framework.
+2. Verificación con la suite oficial de pruebas.
+3. Evaluación inicial contra baselines.
+4. Evaluación robusta por múltiples seeds.
+5. Iteración de recompensa mediante penalización por turnover.
+6. Integración de la mejor configuración encontrada en la versión final del agente.
+7. Documentación de resultados, limitaciones y evidencia visual.
+
+La decisión final fue conservar un agente `Double DQN` con espacio de acciones discreto, observación basada en retornos recientes y pesos actuales, y recompensa regularizada por turnover.
+
+El resultado final es una solución funcional, testeada y metodológicamente defendible. El agente no se presenta como una estrategia financiera superior en todos los escenarios, sino como una implementación de reinforcement learning capaz de aprender una política interpretable, rentable en varias configuraciones y más robusta que políticas activas de alta rotación cuando se introducen costos de transacción.
